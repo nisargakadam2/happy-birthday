@@ -1,640 +1,968 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import confetti from 'canvas-confetti';
-import axios from 'axios';
-import toast, { Toaster } from 'react-hot-toast';
-import samplePhoto1 from './assets/photo-1.svg';
-import samplePhoto2 from './assets/photo-2.svg';
-import samplePhoto3 from './assets/photo-3.svg';
+import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FaPlay, FaPause, FaMusic } from 'react-icons/fa'
+import confetti from 'canvas-confetti'
+import { gallery } from '../public/data/gallery'
+import { letters } from '../public/data/letters'
+import { timeline } from '../public/data/timeline'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const localMedia = Object.entries(
-  import.meta.glob('./assets/custom/*.{jpg,jpeg,png,webp,mp4,mp3,mpeg}', {
-    eager: true,
-    as: 'url'
-  })
-).map(([path, src]) => {
-  const name = path.split('/').pop();
-  return {
-    _id: `local-${name}`,
-    url: src,
-    caption: name.replace(/[-_]/g, ' ').replace(/\.[^.]+$/, ''),
-    type: /\.(mp4|webm|ogg|mpeg)$/i.test(src) ? 'video' : /\.(mp3)$/i.test(src) ? 'audio' : 'image'
-  };
-});
-
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
 function App() {
-  const [loading, setLoading] = useState(true);
-  const [photos, setPhotos] = useState([]);
-  const [letters, setLetters] = useState([]);
-  const [timeline, setTimeline] = useState([]);
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [selectedLetter, setSelectedLetter] = useState(null);
-  const [showWishForm, setShowWishForm] = useState(false);
-  const [showFullLetter, setShowFullLetter] = useState(false);
-  const [wishData, setWishData] = useState({ name: '', message: '' });
-
-  // ============ PERSONALIZE HERE ============
-  const FRIEND_NAME = "Sakshi"; // 👈 CHANGE THIS TO YOUR FRIEND'S NAME
-  const YOUR_NAME = "Nisarga";    // 👈 CHANGE THIS TO YOUR NAME
-  const BIRTHDAY_MESSAGE = "Thank you for existing in my life the way you do. 🤍"; // 👈 CHANGE THIS
-
-  const fallbackPhotos = [
-    { _id: 'fallback-1', url: samplePhoto1, caption: 'Sweet snapshot of a fun day', type: 'image' },
-    { _id: 'fallback-2', url: samplePhoto2, caption: 'Beautiful memories we share', type: 'image' },
-    { _id: 'fallback-3', url: samplePhoto3, caption: 'A moment worth celebrating', type: 'image' }
-  ];
-
-  const fallbackLetters = [
-    {
-      _id: 'fallback-poem-1',
-      title: 'A Quiet Storm',
-      content: `You carry storms so quietly
-that people mistake you for calm,
-while I see galaxies in your silence
-and poetry in everything you are.
-
-Sakshi,
-you were never meant
-to shrink yourself
-to fit inside people’s opinions.
-
-The moon never asks the sky
-if it is beautiful enough to shine,
-the flowers never bloom
-for the approval of strangers,
-then why should you?
-
-There is a softness in your soul
-that this world does not deserve completely,
-and yet you still choose kindness
-like your heart has never been hurt before.
-
-I hope one day
-you stop looking into mirrors
-searching for flaws
-that only cruel eyes could create.
-
-Because the truth is—
-your beauty was never just your face,
-it lives in your heart,
-your laugh,
-your care,
-your existence.
-
-And if people fail to see it,
-let them remain blind.
-
-Do not let temporary voices
-make you question
-the permanent magic within you.
-
-You are art, Sakshi.
-Not everyone understands art.
-But that never makes it any less beautiful.`,
-    },
-    {
-      _id: 'fallback-poem-2',
-      title: 'Unspoken Thanks',
-      content: `There are a lot of things
-I never really said out loud.
-
-Like how talking to you
-became a part of my day
-without me even realizing it.
-
-Or how some days felt lighter
-just because you were around.
-
-I never told you properly,
-but your presence matters.
-More than you probably know.
-
-It was always the small things—
-the random conversations,
-your stupid jokes,
-the way you stayed
-even when I wasn’t easy to deal with.
-
-And maybe I got too used to that.
-
-I think that’s why
-the distance feels strange now.
-
-But before anything changes more,
-I just wanted to say thank you.
-
-For every moment
-you were there without trying too hard,
-and for being someone
-who made life feel a little softer.`,
-    },
-    {
-      _id: 'fallback-poem-3',
-      title: 'Borrow My Eyes',
-      content: `You look at yourself
-like someone searching for flaws
-in a masterpiece,
-while I stand here
-wondering how someone so beautiful
-can be so unaware of it.
-
-You notice the things
-you wish were different,
-the insecurities,
-the moments you think made you less worthy.
-
-But I notice
-the way your eyes soften
-when you genuinely care,
-the way your laughter feels real enough
-to heal heavy days,
-the way your silence
-still carries warmth.
-
-You see an ordinary girl.
-I see someone
-with the kind of soul
-people write poetry about.
-
-And maybe that is the saddest thing—
-how harshly you see yourself,
-while the world around you
-quietly admires everything you are.
-
-If only you could borrow my eyes
-for a moment,
-you would finally understand
-why your presence feels like comfort,
-why your existence feels important,
-why losing you would feel
-like losing a piece of peace.
-
-You do not see yourself
-the way I do.
-
-Because if you did,
-you would stop doubting
-whether you were enough.
-
-You always were.`,
-    },
-  ];
-
-  const displayedPhotos = photos.length > 0 ? photos : localMedia.length > 0 ? localMedia : fallbackPhotos;
-  const displayedLetters = letters.length > 0 ? letters : fallbackLetters;
-  const poemCards = [...displayedLetters.slice(0, 3)];
-  while (poemCards.length < 3) {
-    poemCards.push({
-      _id: `poem-placeholder-${poemCards.length + 1}`,
-      title: `Poem ${poemCards.length + 1}`,
-      content: 'Paste your poem here to make this section even more special.',
-    });
-  }
-  const isUsingLocalMedia = photos.length === 0 && localMedia.length > 0;
-  const directLetter = displayedLetters[0] || { content: '' };
-  const directLetterPreview = directLetter.content.length > 360 && !showFullLetter
-    ? directLetter.content.slice(0, 360) + '...'
-    : directLetter.content;
-  const canToggleLetter = directLetter.content.length > 360;
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchData();
-    setTimeout(() => {
-      setLoading(false);
-      triggerConfetti();
-    }, 2000);
-  }, []);
+    const timer = setTimeout(() => {
+      setLoading(false)
+    }, 4000)
 
-  const fetchData = async () => {
-    try {
-      const [photosRes, lettersRes, timelineRes] = await Promise.all([
-        axios.get(`${API_URL}/api/photos`),
-        axios.get(`${API_URL}/api/letters`),
-        axios.get(`${API_URL}/api/timeline`)
-      ]);
-      setPhotos(photosRes.data);
-      setLetters(lettersRes.data);
-      setTimeline(timelineRes.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    }
-  };
-
-  const triggerConfetti = () => {
-    const duration = 3000;
-    const end = Date.now() + duration;
-
-    const interval = setInterval(() => {
-      if (Date.now() > end) return clearInterval(interval);
-
-      confetti({
-        particleCount: 2,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0 },
-        colors: ['#FF6B9D', '#C44569', '#FFC3A0']
-      });
-      confetti({
-        particleCount: 2,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1 },
-        colors: ['#FF6B9D', '#C44569', '#FFC3A0']
-      });
-    }, 30);
-  };
-
-  const submitWish = async () => {
-    try {
-      await axios.post(`${API_URL}/api/wishes`, wishData);
-      toast.success('Your wish has been submitted! 💝');
-      setWishData({ name: '', message: '' });
-      setShowWishForm(false);
-    } catch (error) {
-      toast.error('Failed to submit wish');
-    }
-  };
+    return () => clearTimeout(timer)
+  }, [])
 
   if (loading) {
-    return (
-      <div className="fixed inset-0 bg-gradient-to-br from-pink-100 via-pink-200 to-rose-300 flex items-center justify-center z-50">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            className="text-8xl mb-4"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          >
-            🎂
-          </motion.div>
-          <h1 className="text-5xl font-script text-pink-600">
-            Loading Something Special...
-          </h1>
-        </motion.div>
-      </div>
-    );
+    return <LoadingScreen />
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-100">
-      <Toaster position="top-right" />
+    <div className="relative">
+      <FloatingHearts />
+      <MusicPlayer />
+      <Hero />
+      <PhotoGallery />
+      <Timeline />
+      <VideoSection />
+      <LettersSection />
+      <FinalMessage />
+    </div>
+  )
+}
 
-      {/* HERO SECTION */}
-      <section className="min-h-screen flex items-center justify-center relative overflow-hidden px-4">
+// ============================================
+// LOADING SCREEN
+// ============================================
+const LoadingScreen = () => {
+  const [dots, setDots] = useState('')
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(prev => prev.length >= 3 ? '' : prev + '.')
+    }, 500)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-pink-100 via-pink-200 to-pink-300"
+    >
+      <div className="text-center">
+        {/* Animated Cake */}
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 5, -5, 0],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="text-9xl mb-8"
+        >
+          🎂
+        </motion.div>
+
+        {/* Loading Text */}
+        <motion.h2
+          animate={{ opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="text-4xl font-dancing text-pink-600 mb-4"
+        >
+          Loading something special{dots}
+        </motion.h2>
+
+        {/* Floating Hearts */}
+        <div className="flex justify-center gap-4 text-4xl">
+          {[...Array(5)].map((_, i) => (
+            <motion.span
+              key={i}
+              animate={{
+                y: [0, -30, 0],
+                opacity: [0.3, 1, 0.3],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                delay: i * 0.2,
+              }}
+            >
+              💖
+            </motion.span>
+          ))}
+        </div>
+
+        {/* Progress Bar */}
+        <div className="w-64 h-2 bg-pink-200 rounded-full mt-8 mx-auto overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-pink-400 to-pink-600 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 3.5, ease: "easeInOut" }}
+          />
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// ============================================
+// HERO SECTION
+// ============================================
+const Hero = () => {
+  const [showSubtitle, setShowSubtitle] = useState(false)
+
+  useEffect(() => {
+    // Confetti animation
+    const duration = 3 * 1000
+    const end = Date.now() + duration
+
+    const frame = () => {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: ['#ec4899', '#f472b6', '#fbcfe8']
+      })
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: ['#ec4899', '#f472b6', '#fbcfe8']
+      })
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame)
+      }
+    }
+    frame()
+
+    setTimeout(() => setShowSubtitle(true), 1000)
+  }, [])
+
+  const scrollToGallery = () => {
+    document.getElementById('gallery').scrollIntoView({ behavior: 'smooth' })
+  }
+
+  return (
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-50 via-pink-100 to-pink-200">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0">
         {[...Array(20)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute text-pink-400 opacity-30 pointer-events-none"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              fontSize: `${Math.random() * 30 + 10}px`
+            className="absolute text-4xl"
+            initial={{
+              x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000),
+              y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1000),
+              opacity: 0.1,
             }}
             animate={{
-              y: [0, -30, 0],
-              opacity: [0.2, 0.5, 0.2]
+              y: [null, Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1000)],
+              opacity: [0.1, 0.3, 0.1],
             }}
             transition={{
-              duration: Math.random() * 5 + 3,
-              repeat: Infinity
+              duration: Math.random() * 10 + 10,
+              repeat: Infinity,
+              ease: "linear"
             }}
           >
-            ❤️
+            {['💖', '✨', '🎂', '🎈', '🌸', '💫'][Math.floor(Math.random() * 6)]}
           </motion.div>
         ))}
+      </div>
 
-        <div className="text-center z-10">
-          <motion.h1
-            initial={{ opacity: 0, y: -50 }}
+      {/* Main Content */}
+      <div className="relative z-10 text-center px-4">
+        <motion.h1
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 100,
+            damping: 10,
+            duration: 1
+          }}
+          className="text-7xl md:text-9xl font-playfair font-bold mb-6 glow gradient-text"
+        >
+          Happy Birthday
+        </motion.h1>
+
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5, duration: 0.8 }}
+          className="text-6xl md:text-8xl font-dancing text-pink-600 mb-8"
+        >
+          Beautiful Soul 💖
+        </motion.div>
+
+        {showSubtitle && (
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-7xl md:text-9xl font-script text-pink-600 mb-6"
+            transition={{ duration: 0.8 }}
+            className="text-xl md:text-2xl font-poppins text-pink-700 mb-12 max-w-2xl mx-auto"
           >
-            Happy Birthday
-          </motion.h1>
-
-          <motion.h2
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-6xl md:text-8xl font-elegant text-rose-700 mb-8"
-          >
-            {FRIEND_NAME} 🎂
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1 }}
-            className="text-xl md:text-2xl text-gray-700 max-w-2xl mx-auto mb-8"
-          >
-            {BIRTHDAY_MESSAGE}
+            Today we celebrate YOU and all the magic you bring to this world ✨
           </motion.p>
-
-          <motion.button
-            onClick={() => document.getElementById('gallery').scrollIntoView({ behavior: 'smooth' })}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-10 py-4 rounded-full text-lg font-semibold shadow-lg"
-          >
-            Explore Our Memories ✨
-          </motion.button>
-        </div>
-      </section>
-
-      {/* PHOTO GALLERY */}
-      <section id="gallery" className="py-20 px-4 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <motion.h2
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="text-5xl md:text-6xl font-script text-center text-pink-600 mb-16"
-          >
-            Our Beautiful Memories 📸
-          </motion.h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {displayedPhotos.map((photo, index) => (
-                <motion.div
-                  key={photo._id}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.1 }}
-                  onClick={() => setSelectedPhoto(photo)}
-                  className="cursor-pointer group relative overflow-hidden rounded-2xl shadow-lg"
-                >
-                  {photo.type === 'audio' || /\.(mp3)$/i.test(photo.url) ? (
-                    <div className="w-full h-80 flex items-center justify-center bg-gray-100 p-4">
-                      <audio src={photo.url} controls className="w-full" />
-                    </div>
-                  ) : photo.type === 'video' || /\.(mp4|webm|ogg|mpeg)$/i.test(photo.url) ? (
-                    <video
-                      src={photo.url}
-                      controls
-                      className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
-                  ) : (
-                    <img
-                      src={photo.url}
-                      alt={photo.caption}
-                      className="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="absolute bottom-4 left-4 right-4">
-                      <p className="text-white font-semibold">{photo.caption}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-          </div>
-          {isUsingLocalMedia && (
-            <div className="text-center mt-10">
-              <p className="text-lg text-gray-500">Local photos/videos from <code>src/assets/custom</code> are being used.</p>
-            </div>
-          )}
-          {photos.length === 0 && !isUsingLocalMedia && (
-            <div className="text-center mt-10">
-              <p className="text-lg text-gray-500">Sample photos are shown until you upload your own birthday memories.</p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* POEMS SECTION */}
-      <section className="py-24 px-4 bg-gradient-to-b from-pink-50 via-white to-rose-50 relative overflow-hidden">
-        <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-pink-200/40 to-transparent pointer-events-none" />
-        <div className="absolute left-1/2 top-20 w-80 h-80 rounded-full bg-rose-200/40 blur-3xl opacity-80 -translate-x-1/2 pointer-events-none" />
-        <div className="absolute right-10 bottom-10 w-60 h-60 rounded-full bg-pink-200/30 blur-3xl opacity-80 pointer-events-none" />
-
-        <div className="max-w-6xl mx-auto relative">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-5xl md:text-6xl font-script text-center text-pink-600 mb-4"
-          >
-            Poems From Nisarga For You 🌸
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="text-center text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-12"
-          >
-            Tap into each poem to feel the quiet thoughts, wishes, and memories written especially for your birthday.
-          </motion.p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {poemCards.map((letter, index) => (
-                <motion.div
-                  key={letter._id}
-                  initial={{ opacity: 0, y: 60 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -10, scale: 1.01 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.12, type: 'spring', stiffness: 120 }}
-                  onClick={() => setSelectedLetter(letter)}
-                  className="group bg-white/90 backdrop-blur-xl p-8 rounded-[2rem] cursor-pointer border border-pink-100 shadow-[0_25px_80px_rgba(219,39,119,0.12)] hover:border-pink-200 transition-all"
-                >
-                  <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-pink-100 text-5xl mb-6 shadow-inner">
-                    🌿
-                  </div>
-                  <h3 className="text-2xl font-elegant text-gray-800 mb-3">{letter.title}</h3>
-                  <p className="text-gray-600 leading-relaxed min-h-[6rem]">{letter.content?.slice(0, 120) || 'Tap to open this gentle poem...'}</p>
-                  <div className="mt-6 flex items-center justify-between text-pink-600 font-semibold">
-                    <span>Read the poem</span>
-                    <span className="text-2xl">→</span>
-                  </div>
-                </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* DIRECT LETTER SECTION */}
-      <section className="py-24 px-4 bg-gradient-to-b from-rose-50 via-white to-pink-50">
-        <div className="max-w-5xl mx-auto">
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-5xl md:text-6xl font-script text-center text-pink-600 mb-4"
-          >
-            A Letter from {YOUR_NAME}
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="text-center text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-12"
-          >
-            This special message is written just for {FRIEND_NAME}. Read it here anytime, without opening the card.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4 }}
-            className="bg-white/95 backdrop-blur-xl border border-pink-100 rounded-[2.5rem] shadow-[0_40px_120px_rgba(219,39,119,0.18)] p-10"
-          >
-            <div className="text-pink-600 text-lg font-semibold mb-4">Dear {FRIEND_NAME},</div>
-            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-lg">{directLetterPreview}</p>
-            {canToggleLetter && (
-              <button
-                onClick={() => setShowFullLetter(!showFullLetter)}
-                className="mt-6 inline-flex items-center gap-2 text-pink-600 font-semibold hover:text-pink-700"
-              >
-                {showFullLetter ? 'Show less' : 'Read more'}
-              </button>
-            )}
-            <div className="mt-10 text-right text-pink-600 font-semibold">— {YOUR_NAME}</div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* WISH FORM */}
-      <section className="py-20 px-4 bg-white">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-5xl font-script text-pink-600 mb-8">
-            Send Your Birthday Wishes 🎉
-          </h2>
-
-          {!showWishForm ? (
-            <button
-              onClick={() => setShowWishForm(true)}
-              className="bg-gradient-to-r from-pink-500 to-rose-500 text-white px-10 py-4 rounded-full text-lg font-semibold"
-            >
-              Write a Wish
-            </button>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-pink-50 p-8 rounded-3xl"
-            >
-              <input
-                type="text"
-                placeholder="Your Name"
-                value={wishData.name}
-                onChange={(e) => setWishData({ ...wishData, name: e.target.value })}
-                className="w-full p-4 rounded-lg mb-4 border-2 border-pink-200 focus:border-pink-500 outline-none"
-              />
-              <textarea
-                placeholder="Your Birthday Message..."
-                value={wishData.message}
-                onChange={(e) => setWishData({ ...wishData, message: e.target.value })}
-                rows="5"
-                className="w-full p-4 rounded-lg mb-4 border-2 border-pink-200 focus:border-pink-500 outline-none"
-              />
-              <div className="flex gap-4">
-                <button
-                  onClick={submitWish}
-                  className="flex-1 bg-gradient-to-r from-pink-500 to-rose-500 text-white py-3 rounded-lg font-semibold"
-                >
-                  Send Wish 💝
-                </button>
-                <button
-                  onClick={() => setShowWishForm(false)}
-                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </section>
-
-      {/* PHOTO MODAL */}
-      <AnimatePresence>
-        {selectedPhoto && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedPhoto(null)}
-            className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
-          >
-            {selectedPhoto.type === 'audio' || /\.(mp3)$/i.test(selectedPhoto.url) ? (
-              <div className="w-full max-w-4xl p-8 bg-white rounded-lg shadow-lg">
-                <audio src={selectedPhoto.url} controls autoPlay className="w-full" />
-                <p className="mt-4 text-center text-white">{selectedPhoto.caption}</p>
-              </div>
-            ) : selectedPhoto.type === 'video' || /\.(mp4|webm|ogg|mpeg)$/i.test(selectedPhoto.url) ? (
-              <video
-                src={selectedPhoto.url}
-                controls
-                autoPlay
-                className="max-w-4xl max-h-[90vh] rounded-lg"
-              />
-            ) : (
-              <motion.img
-                initial={{ scale: 0.5 }}
-                animate={{ scale: 1 }}
-                src={selectedPhoto.url}
-                alt={selectedPhoto.caption}
-                className="max-w-4xl max-h-[90vh] rounded-lg"
-              />
-            )}
-          </motion.div>
         )}
-      </AnimatePresence>
 
-      {/* POEM MODAL */}
-      <AnimatePresence>
-        {selectedLetter && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedLetter(null)}
-            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 50, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 50, scale: 0.9 }}
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-gradient-to-br from-white via-pink-50 to-rose-50 max-w-3xl w-full rounded-[2.5rem] shadow-[0_40px_120px_rgba(219,39,119,0.25)] border border-pink-100 p-12 relative my-8"
-            >
-              <button
-                onClick={() => setSelectedLetter(null)}
-                className="absolute top-6 right-6 text-3xl text-gray-600 hover:text-pink-600"
-              >
-                ✕
-              </button>
+        <motion.button
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 1.5, duration: 0.5 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={scrollToGallery}
+          className="px-8 py-4 bg-pink-600 text-white text-lg font-semibold rounded-full shadow-lg hover:shadow-2xl transition-all duration-300 "
+        >
+          Explore Your Special Day 🎁
+        </motion.button>
 
-              <h2 className="text-4xl font-script text-pink-600 mb-6 text-center">
-                {selectedLetter.title}
-              </h2>
+        {/* Floating Birthday Cake */}
+        <motion.div
+          animate={{
+            y: [0, -20, 0],
+            rotate: [0, 5, -5, 0],
+          }}
+          transition={{
+            duration: 4,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="text-8xl mt-12"
+        >
+          🎂
+        </motion.div>
+      </div>
 
-              <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-lg">
-                {selectedLetter.content}
-              </p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* FOOTER */}
-      <footer className="bg-gradient-to-r from-pink-500 to-rose-500 text-white py-8 text-center">
-        <p className="text-2xl font-script mb-2">
-          Made with ❤️ by {YOUR_NAME}
-        </p>
-        <p className="text-sm opacity-80">For the most amazing {FRIEND_NAME} 🎂</p>
-      </footer>
-    </div>
-  );
+      {/* Scroll Indicator */}
+      <motion.div
+        animate={{ y: [0, 10, 0] }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+        className="absolute bottom-10 left-1/2 transform -translate-x-1/2"
+      >
+        <div className="text-pink-600 text-4xl">↓</div>
+      </motion.div>
+    </section>
+  )
 }
 
-export default App;
+// ============================================
+// PHOTO GALLERY
+// ============================================
+const PhotoGallery = () => {
+  const [selectedImage, setSelectedImage] = useState(null)
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  }
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1
+    }
+  }
+
+  return (
+    <section id="gallery" className="py-20 px-4 bg-gradient-to-b from-pink-50 to-white">
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.8 }}
+        className="text-center mb-16"
+      >
+        <h2 className="text-6xl font-playfair font-bold text-pink-600 mb-4">
+          Our Beautiful Memories 📸
+        </h2>
+        <p className="text-xl text-pink-500 font-poppins">
+          Every picture tells our story
+        </p>
+      </motion.div>
+
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+      >
+        {gallery.map((image, index) => (
+          <motion.div
+            key={index}
+            variants={itemVariants}
+            whileHover={{ scale: 1.05, rotate: Math.random() * 4 - 2 }}
+            className="relative overflow-hidden rounded-2xl shadow-xl cursor-pointer group"
+            onClick={() => setSelectedImage(image)}
+          >
+            <img
+              src={image}
+              alt={`Memory ${index + 1}`}
+              className="w-full h-80 object-cover transition-transform duration-500 group-hover:scale-110"
+              onError={(e) => {
+                e.target.src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%23fbcfe8"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="20" fill="%23ec4899">Photo ${index + 1}</text></svg>`
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-pink-600/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+              <p className="text-white font-semibold p-4 text-lg">
+                Memory #{index + 1}
+              </p>
+            </div>
+          </motion.div>
+        ))}
+      </motion.div>
+
+      {/* Fullscreen Modal */}
+      {selectedImage && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setSelectedImage(null)}
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-pointer"
+        >
+          <motion.img
+            initial={{ scale: 0.5 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0.5 }}
+            src={selectedImage}
+            alt="Selected"
+            className="max-w-full max-h-full rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setSelectedImage(null)}
+            className="absolute top-4 right-4 text-white text-4xl hover:text-pink-400 transition-colors"
+          >
+            ✕
+          </button>
+        </motion.div>
+      )}
+    </section>
+  )
+}
+
+// ============================================
+// TIMELINE
+// ============================================
+const Timeline = () => {
+  return (
+    <section className="py-20 px-4 bg-gradient-to-b from-white to-pink-50">
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="text-center mb-16"
+      >
+        <h2 className="text-6xl font-playfair font-bold text-pink-600 mb-4">
+          Our Journey Together 🌸
+        </h2>
+        <p className="text-xl text-pink-500 font-poppins">
+          Every step of our beautiful story
+        </p>
+      </motion.div>
+
+      <div className="max-w-4xl mx-auto relative">
+        {/* Timeline Line */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 h-full w-1 bg-gradient-to-b from-pink-300 via-pink-400 to-pink-500 hidden md:block" />
+
+        {timeline.map((item, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, x: index % 2 === 0 ? -50 : 50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.2 }}
+            className={`relative mb-16 md:mb-24 ${
+              index % 2 === 0 ? 'md:pr-1/2' : 'md:pl-1/2 md:text-right'
+            }`}
+          >
+            <div className={`flex ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'} items-center gap-8`}>
+              {/* Content */}
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                className="flex-1 glass p-6 rounded-2xl shadow-xl"
+              >
+                <span className="inline-block px-4 py-1 bg-pink-500 text-white rounded-full text-sm font-semibold mb-3">
+                  {item.date}
+                </span>
+                <h3 className="text-2xl font-playfair font-bold text-pink-700 mb-2">
+                  {item.title}
+                </h3>
+                <p className="text-pink-600 font-poppins">
+                  {item.description}
+                </p>
+              </motion.div>
+
+              {/* Center Dot */}
+              <div className="hidden md:block absolute left-1/2 transform -translate-x-1/2">
+                <motion.div
+                  whileHover={{ scale: 1.5 }}
+                  className="w-6 h-6 bg-pink-500 rounded-full border-4 border-white shadow-lg"
+                />
+              </div>
+
+              {/* Image */}
+              <motion.div
+                whileHover={{ rotate: Math.random() * 10 - 5 }}
+                className="flex-1"
+              >
+                <img
+                  src={item.image}
+                  alt={item.title}
+                  className="w-full h-64 object-cover rounded-2xl shadow-xl"
+                  onError={(e) => {
+                    e.target.src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%23fbcfe8"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="18" fill="%23ec4899">${item.title}</text></svg>`
+                  }}
+                />
+              </motion.div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ============================================
+// VIDEO SECTION
+// ============================================
+const VideoSection = () => {
+  const [selectedVideo, setSelectedVideo] = useState(null)
+
+  const videos = [
+    {
+      src: "/videos/memory1.mp4",
+      title: "Our First Adventure",
+      thumbnail: "/images/photo1.jpg"
+    },
+    {
+      src: "/videos/memory2.mp4",
+      title: "Unforgettable Moments",
+      thumbnail: "/images/photo2.jpg"
+    },
+    {
+      src: "/videos/memory3.mp4",
+      title: "Beautiful Times",
+      thumbnail: "/images/photo3.jpg"
+    }
+  ]
+
+  return (
+    <section className="py-20 px-4 bg-gradient-to-b from-pink-50 to-white">
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="text-center mb-16"
+      >
+        <h2 className="text-6xl font-playfair font-bold text-pink-600 mb-4">
+          Video Memories 🎬
+        </h2>
+        <p className="text-xl text-pink-500 font-poppins">
+          Relive our favorite moments together
+        </p>
+      </motion.div>
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {videos.map((video, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, scale: 0.8 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.2 }}
+            whileHover={{ y: -10 }}
+            className="relative group cursor-pointer"
+            onClick={() => setSelectedVideo(video.src)}
+          >
+            <div className="relative overflow-hidden rounded-2xl shadow-2xl">
+              <img
+                src={video.thumbnail}
+                alt={video.title}
+                className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-110"
+                onError={(e) => {
+                  e.target.src = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%23fbcfe8"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="20" fill="%23ec4899">Video ${index + 1}</text></svg>`
+                }}
+              />
+              
+              {/* Play Button Overlay */}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/60 transition-all duration-300">
+                <motion.div
+                  whileHover={{ scale: 1.2 }}
+                  className="w-20 h-20 bg-pink-500 rounded-full flex items-center justify-center shadow-lg"
+                >
+                  <FaPlay className="text-white text-2xl ml-1" />
+                </motion.div>
+              </div>
+
+              {/* Title */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                <h3 className="text-white font-semibold text-lg">
+                  {video.title}
+                </h3>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Video Modal */}
+      {selectedVideo && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
+          onClick={() => setSelectedVideo(null)}
+        >
+          <motion.div
+            initial={{ scale: 0.5 }}
+            animate={{ scale: 1 }}
+            className="relative max-w-4xl w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <video
+              src={selectedVideo}
+              controls
+              autoPlay
+              className="w-full rounded-lg shadow-2xl"
+            >
+              Your browser doesn't support video playback.
+            </video>
+            <button
+              onClick={() => setSelectedVideo(null)}
+              className="absolute -top-12 right-0 text-white text-3xl hover:text-pink-400 transition-colors"
+            >
+              ✕ Close
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </section>
+  )
+}
+
+// ============================================
+// LETTERS SECTION
+// ============================================
+const LettersSection = () => {
+  const [selectedLetter, setSelectedLetter] = useState(null)
+  const [displayedText, setDisplayedText] = useState('')
+
+  const openLetter = (letter) => {
+    setSelectedLetter(letter)
+    setDisplayedText('')
+    
+    // Typewriter effect
+    let index = 0
+    const text = letter.content
+    const interval = setInterval(() => {
+      if (index < text.length) {
+        setDisplayedText(prev => prev + text[index])
+        index++
+      } else {
+        clearInterval(interval)
+      }
+    }, 20)
+
+    return () => clearInterval(interval)
+  }
+
+  return (
+    <section className="py-20 px-4 bg-gradient-to-b from-white to-pink-50">
+      <motion.div
+        initial={{ opacity: 0, y: -50 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="text-center mb-16"
+      >
+        <h2 className="text-6xl font-playfair font-bold text-pink-600 mb-4">
+          Letters From The Heart 💌
+        </h2>
+        <p className="text-xl text-pink-500 font-poppins">
+          Words that come straight from my soul
+        </p>
+      </motion.div>
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+        {letters.map((letter, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.2 }}
+            whileHover={{ y: -10, rotate: Math.random() * 6 - 3 }}
+            className="cursor-pointer"
+            onClick={() => openLetter(letter)}
+          >
+            <div className="bg-gradient-to-br from-pink-100 to-pink-50 p-8 rounded-lg shadow-xl border-2 border-pink-200 relative overflow-hidden group">
+              {/* Decorative elements */}
+              <div className="absolute top-0 right-0 text-6xl opacity-20 group-hover:opacity-40 transition-opacity">
+                💌
+              </div>
+              
+              <div className="relative z-10">
+                <h3 className="text-2xl font-dancing font-bold text-pink-700 mb-4">
+                  {letter.title}
+                </h3>
+                <p className="text-pink-600 font-poppins line-clamp-3">
+                  {letter.content.substring(0, 100)}...
+                </p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="mt-6 px-6 py-2 bg-pink-500 text-white rounded-full font-semibold hover:bg-pink-600 transition-colors"
+                >
+                  Read Letter
+                </motion.button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Letter Modal */}
+      {selectedLetter && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setSelectedLetter(null)}
+        >
+          <motion.div
+            initial={{ scale: 0.5, rotate: -10 }}
+            animate={{ scale: 1, rotate: 0 }}
+            className="bg-gradient-to-br from-pink-50 to-white p-8 md:p-12 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Decorative stamp */}
+            <div className="absolute top-4 right-4 w-20 h-20 bg-pink-200 rounded-full flex items-center justify-center border-4 border-pink-400 rotate-12">
+              <span className="text-3xl">💖</span>
+            </div>
+
+            <h3 className="text-4xl font-dancing font-bold text-pink-700 mb-6">
+              {selectedLetter.title}
+            </h3>
+            
+            <div className="text-pink-800 font-poppins text-lg leading-relaxed whitespace-pre-line">
+              {displayedText}
+              <motion.span
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ duration: 0.8, repeat: Infinity }}
+              >
+                |
+              </motion.span>
+            </div>
+
+            <button
+              onClick={() => setSelectedLetter(null)}
+              className="mt-8 px-8 py-3 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-full font-semibold hover:shadow-lg transition-all"
+            >
+              Close Letter
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </section>
+  )
+}
+
+// ============================================
+// MUSIC PLAYER
+// ============================================
+const MusicPlayer = () => {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [isMinimized, setIsMinimized] = useState(false)
+  const audioRef = useRef(null)
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const updateProgress = () => {
+      const value = (audio.currentTime / audio.duration) * 100
+      setProgress(isNaN(value) ? 0 : value)
+    }
+
+    audio.addEventListener('timeupdate', updateProgress)
+    return () => audio.removeEventListener('timeupdate', updateProgress)
+  }, [])
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause()
+      } else {
+        audioRef.current.play()
+      }
+      setIsPlaying(!isPlaying)
+    }
+  }
+
+  return (
+    <>
+      <audio ref={audioRef} loop>
+        <source src="/music/song.mp3" type="audio/mpeg" />
+      </audio>
+
+      <AnimatePresence>
+        {!isMinimized && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-8 right-8 z-40 glass p-6 rounded-2xl shadow-2xl w-80"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full flex items-center justify-center">
+                  <FaMusic className="text-white text-xl" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-pink-700">Birthday Song</h3>
+                  <p className="text-xs text-pink-500">For you 💖</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMinimized(true)}
+                className="text-pink-500 hover:text-pink-700 text-xl"
+              >
+                −
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="w-full h-2 bg-pink-200 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-pink-400 to-pink-600"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-center">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={togglePlay}
+                className="w-14 h-14 bg-gradient-to-r from-pink-500 to-pink-600 rounded-full flex items-center justify-center text-white shadow-lg"
+              >
+                {isPlaying ? <FaPause className="text-xl" /> : <FaPlay className="text-xl ml-1" />}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Minimized Player */}
+      {isMinimized && (
+        <motion.button
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileHover={{ scale: 1.1 }}
+          onClick={() => setIsMinimized(false)}
+          className="fixed bottom-8 right-8 z-40 w-16 h-16 bg-gradient-to-r from-pink-500 to-pink-600 rounded-full flex items-center justify-center text-white shadow-2xl"
+        >
+          <FaMusic className={`text-2xl ${isPlaying ? 'animate-pulse' : ''}`} />
+        </motion.button>
+      )}
+    </>
+  )
+}
+
+// ============================================
+// FINAL MESSAGE
+// ============================================
+const FinalMessage = () => {
+  useEffect(() => {
+    const triggerConfetti = () => {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#ec4899', '#f472b6', '#fbcfe8', '#fce7f3']
+      })
+    }
+
+    const interval = setInterval(triggerConfetti, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-pink-100 via-pink-200 to-pink-300 py-20 px-4">
+      {/* Animated Stars */}
+      <div className="absolute inset-0">
+        {[...Array(30)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute text-yellow-400"
+            initial={{
+              x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000),
+              y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1000),
+              opacity: 0,
+            }}
+            animate={{
+              opacity: [0, 1, 0],
+              scale: [0, 1.5, 0],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              delay: Math.random() * 3,
+            }}
+          >
+            ✨
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 max-w-4xl mx-auto text-center">
+        <motion.div
+          initial={{ scale: 0, opacity: 0 }}
+          whileInView={{ scale: 1, opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ type: "spring", duration: 1 }}
+          className="mb-12"
+        >
+          <div className="text-8xl mb-6">🎂🎉🎈</div>
+          <h2 className="text-6xl md:text-7xl font-playfair font-bold gradient-text mb-6">
+            You Are Loved
+          </h2>
+          <div className="text-5xl mb-8">💖</div>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          whileInView={{ y: 0, opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.3 }}
+          className="glass p-8 md:p-12 rounded-3xl shadow-2xl mb-12"
+        >
+          <p className="text-2xl md:text-3xl font-dancing text-pink-700 mb-6 leading-relaxed">
+            On this special day, I want you to know that you are cherished beyond words.
+          </p>
+          <p className="text-lg md:text-xl font-poppins text-pink-600 leading-relaxed">
+            May your birthday be filled with endless joy, laughter, and all the love you deserve.
+            You make the world a brighter place just by being in it. Here's to celebrating YOU
+            today and always! 🎊
+          </p>
+          <div className="mt-8 text-4xl">🌟💫✨</div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.6 }}
+          className="space-y-4"
+        >
+          <p className="text-3xl font-dancing text-pink-600">
+            Wishing you the happiest of birthdays! 🎂
+          </p>
+          <p className="text-xl font-poppins text-pink-500">
+            Made with endless love ❤️
+          </p>
+          <div className="text-6xl animate-pulse mt-8">
+            💝
+          </div>
+        </motion.div>
+
+        {/* Floating Birthday Elements */}
+        <div className="absolute inset-0 pointer-events-none">
+          {['🎈', '🎁', '🎊', '🎉', '🍰', '💐'].map((emoji, i) => (
+            <motion.div
+              key={i}
+              className="absolute text-5xl"
+              initial={{ y: 0, x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000) }}
+              animate={{
+                y: [0, -(typeof window !== 'undefined' ? window.innerHeight : 1000)],
+                x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000),
+                rotate: [0, 360],
+              }}
+              transition={{
+                duration: 10 + Math.random() * 10,
+                repeat: Infinity,
+                delay: Math.random() * 5,
+              }}
+            >
+              {emoji}
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ============================================
+// FLOATING HEARTS
+// ============================================
+const FloatingHearts = () => {
+  const hearts = [...Array(15)].map((_, i) => ({
+    id: i,
+    size: Math.random() * 30 + 20,
+    left: Math.random() * 100,
+    delay: Math.random() * 5,
+    duration: Math.random() * 10 + 10,
+  }))
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+      {hearts.map((heart) => (
+        <motion.div
+          key={heart.id}
+          className="absolute text-pink-400 opacity-20"
+          style={{
+            fontSize: `${heart.size}px`,
+            left: `${heart.left}%`,
+            bottom: -50,
+          }}
+          animate={{
+            y: [-50, -(typeof window !== 'undefined' ? window.innerHeight : 1000) - 100],
+            x: [0, Math.sin(heart.id) * 100],
+            rotate: [0, 360],
+            opacity: [0.2, 0.5, 0.2],
+          }}
+          transition={{
+            duration: heart.duration,
+            repeat: Infinity,
+            delay: heart.delay,
+            ease: "linear",
+          }}
+        >
+          💖
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
+export default App
